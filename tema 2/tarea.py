@@ -1,4 +1,4 @@
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import RunnableLambda,RunnableParallel 
 from langchain_google_genai import ChatGoogleGenerativeAI
 import json
 
@@ -21,6 +21,8 @@ def generate_summary(text):
     )
     response = llm.invoke(prompt)
     return response.content
+
+summary_branch = RunnableLambda(generate_summary)
 
 def analyze_sentiment(text):
     prompt = f"""Analiza el sentimiento del siguiente texto.
@@ -46,6 +48,7 @@ def analyze_sentiment(text):
         print("ERROR JSON:", repr(raw))
         return {"sentimiento": "neutro", "razon": "Error en análisis"}
 
+sentiment_branch = RunnableLambda(analyze_sentiment)
 
 def merge_results(data):
     return {
@@ -53,25 +56,41 @@ def merge_results(data):
         "sentimiento": data["sentimiento_data"]["sentimiento"],
         "razon": data["sentimiento_data"]["razon"]
     }
+    
+merger = RunnableLambda(merge_results)
 
-def process_one(t):
-    resumen = generate_summary(t)              
-    sentimiento_data = analyze_sentiment(t) 
-    return merge_results({
-        "resumen": resumen,
-        "sentimiento_data": sentimiento_data
-    })
-    
-process = RunnableLambda(process_one)
-    
-chain = preprocessor | process
+
+#
+#def process_one(t):
+#    resumen = generate_summary(t)              
+#    sentimiento_data = analyze_sentiment(t) 
+#    return merge_results({
+#        "resumen": resumen,
+#        "sentimiento_data": sentimiento_data
+#    })
+#    
+# process = RunnableLambda(process_one)
+#      
+# chain = preprocessor | process
+
+parallel_analysis = RunnableParallel({
+    "resumen": summary_branch,
+    "sentimiento_data": sentiment_branch
+})
+
+chain = preprocessor | parallel_analysis | merger
 
 textos_prueba = [
     "¡Me encanta este producto! Funciona perfectamente y llegó muy rápido.",
 ]
- 
-for texto in textos_prueba:
-    resultado = chain.invoke(texto)
-    print(f"Texto: {texto}")
-    print(f"Resultado: {resultado}")
-    print("-" * 50)
+
+
+#for texto in textos_prueba:
+#    resultado = chain.invoke(texto)
+#    print(f"Texto: {texto}")
+#    print(f"Resultado: {resultado}")
+#    print("-" * 50)
+
+resultado_batch = chain.batch(textos_prueba) #se ejecutan en parelelo los textos
+
+print(resultado_batch)
